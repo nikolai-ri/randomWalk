@@ -1,0 +1,74 @@
+body{
+    width: 100vw;
+    height: 100vh;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+}
+
+#containerControls {
+    z-index: 100;
+}
+
+#containerControls > button {
+    z-index: 100;
+}
+
+#containerContainer {
+    display: flex;
+    justify-content: center;
+    height: 65vh;
+    width: 99vw;
+    overflow: hidden;
+}
+
+#container-walker {
+    position: absolute;
+    height: inherit;
+    width: 97vw;
+    border: 1px solid black;
+    padding: 0px;
+    margin: 0px;
+    z-index: 20;
+}
+
+.walker{
+    position: absolute;
+    width: 1vh;
+    height: 1vh;
+    background-color: blue;
+    border-radius: 50%;
+    display: block;
+}
+
+#containerStatistics {
+    display: flex;
+    justify-content: center;
+    width: 99vw;
+}
+
+.axis path,
+.axis line {
+  display: black;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.x.axis{
+    stroke-width: 1px;
+}
+
+.x.axis path {
+  display: black;
+  stroke-width: 1px;
+}
+
+.line {
+    fill: none;
+    stroke: steelblue;
+    stroke-width: 2px;
+}
+
+#yMeanDistance{
+    stroke: red;
+}

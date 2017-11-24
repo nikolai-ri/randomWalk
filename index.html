@@ -1,0 +1,325 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<meta name="description" content="A random walk build with pure vanilla javascript.">
+		<meta name="keywords" content="Random walk citizen science javascript html css">
+		<meta name="author" content="Nikolai Riedel">
+		<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+		<title>Implementation of a random walk</title>
+		<link href='index.css' rel='stylesheet' type='text/css' asnyc>
+		<script type='text/javascript' src='https://cdnjs.cloudflare.com/ajax/libs/d3/4.12.0/d3.min.js'></script>
+		<script type="text/javascript" src='RandomWalk.js'></script>
+		<script type='text/javascript' src='walker.js'></script>
+		
+
+	</head>
+<body>
+	<div id='containerControls'>
+		<button type="button" id="buttonAllWalkers">Start Random Walk</button>
+		<button type="button" id="reloadWalkers">Reload Walkers</button>
+		<label>Boarders<input type="checkbox" id="toggleBoarders" checked='checked'/></label>
+		<label>Collisions<input type="checkbox" id="toggleCollisions" checked="checked" /></label>
+		<span># Walkers: <input type="number" id='numberOfWalkers' value='100'/></span>
+		<span># Steps: <input type="number" id='numberOfSteps' value='5000'/></span>
+		<span>X Upper Corner: <input type="number" id='xCoordinate' value='0' min='0' /></span>
+		<span>Y Upper Corner: <input type="number" id='yCoordinate' value='0' min='0' /></span>
+		<span>Used Perc. of Screen: <input type='number' id='partOfScreen' value='100' max='100' min='1'/></span>
+	</div>
+	<div id='containerContainer'>
+		<div id="container-walker">
+		</div>
+	</div>
+	<div id='containerStatistics'>
+		<!--<div id="letiance"></div>-->
+		<!--<div id="collisions"></div>-->
+		<svg id='positionGraph'></svg>
+	</div>
+
+	
+	
+	<noscript>
+		<p>It seems you turned off javascript. If so, you have to turn it on to view this page. If you have turned it on, and the page still does not load, please contact alpinewebdev@gmail.com!</p>
+	</noscript>
+
+	<script type="text/javascript">
+
+		(function(){
+
+			'use strict'
+
+			/**
+			 * This Part implements the random walk. The graph part using D3 is implemented blow this block.
+			*/
+			let graphData = [];
+			let timeZero = 0;
+			let toggleBoarders = true;
+			let toggleCollisions = true;
+			
+			let windowHeight = window.innerHeight - window.innerHeight / 10;
+			let windowWidth = window.innerWidth - window.innerWidth / 10;
+			let xCoordUpperCorner = Number(document.getElementById('xCoordinate').value);
+			let yCoordUpperCorner = Number(document.getElementById('yCoordinate').value);
+			let numberOfWalkers = Number(document.getElementById('numberOfWalkers').value);
+			let numberOfSteps = Number(document.getElementById('numberOfSteps').value);
+			let partOfScreenUsed = Number(document.getElementById('partOfScreen').value);
+			let walkerContainerNode = document.getElementById('container-walker');
+			let randomWalk = new RandomWalk(document.getElementById('numberOfWalkers').value, 
+											xCoordUpperCorner, 
+											yCoordUpperCorner, 
+											walkerContainerNode.clientHeight, 
+											walkerContainerNode.clientWidth, 
+											partOfScreenUsed, 
+											windowHeight, 
+											walkerContainerNode,
+											numberOfSteps,
+											graphData,
+										    toggleBoarders,
+											toggleCollisions);
+			randomWalk.createWalkers();
+			let reloaded = true; // Is set when the user clicks the reload button.
+
+			/** 
+			 * endOfWalkTime and offsetTime are used to make the graph continous on the time scale. If a random walk ends due to its number of steps being reached,
+			 * the time still runs, and the next time it is continued, the graph will jump ahead to a new time. To avoid this, an offset is subtracted the continued time.
+			*/
+			let endOfWalkTime = 0;
+			let offsetTime = 0;
+
+			
+				
+			/* Block that runs the animation of the random walk*/
+			let lastFrameTimeMs = 0;
+			const maxFPS = 60;
+			let currentStep = 0;
+
+			/** 
+			*Recursive function that runs the random walk. It is similar to the game loop in games.
+			*@param number timestamp - Time in ms.
+			*/
+			function startRandomWalk(timestamp){
+					if(currentStep >= numberOfSteps){
+						endOfWalkTime = Date.now();
+						return;
+					} 
+					if(timestamp < lastFrameTimeMs + 1000 / maxFPS){
+						if(currentStep < numberOfSteps){
+							requestAnimationFrame(startRandomWalk);
+							return;
+						}
+						return;
+					}
+					
+					randomWalk.allWalkersIteration().then(
+						function(){
+							let totalDistance = 0;
+							let currentTime = Date.now();
+							for(let i = 0; i < randomWalk.walkerNodes.length; i++){
+								totalDistance = (randomWalk.walkerNodes[i].distance[0] + randomWalk.walkerNodes[i].distance[1]) / (windowHeight/100);
+
+								if(i === randomWalk.walkerNodes.length - 1){
+									graphData.push({
+										date : ( currentTime - offsetTime - timeZero ) / 1000,
+										distance : totalDistance,
+										expectedValue : randomWalk.getExpectedValue()
+									});
+								}
+							}							
+							updateGraph();
+							lastFrameTimeMs = timestamp;
+							currentStep++;
+							requestAnimationFrame(startRandomWalk);
+						}
+						
+					);
+					
+			}
+			
+			/**
+			* Event handler, which starts the random walk animation.
+			*/
+			document.getElementById("buttonAllWalkers").onclick = function(){
+				currentStep = 0;
+				g.selectAll("path").remove();
+				graphData = '';
+				graphData = [];
+				numberOfSteps = Number(document.getElementById('numberOfSteps').value);
+				if(reloaded){
+					timeZero = Date.now();
+					reloaded = false;
+				} else if(graphData[0] !== undefined){
+					offsetTime += (Date.now() - endOfWalkTime);
+				}
+				requestAnimationFrame(startRandomWalk);				
+			}
+
+			/*End of block that runs the animation*/
+
+			/** 
+			 * Event handler, which reloads the walkers and stops the current random walk. Graph is deleted only, when a new walk is started.
+			*/
+			document.getElementById('reloadWalkers').onclick = function(){
+				currentStep = Number(document.getElementById('numberOfSteps')) + 1;
+				reloaded = true;
+				randomWalk.numOfWalkers = Number(document.getElementById('numberOfWalkers').value);
+				numberOfSteps = Number(document.getElementById('numberOfSteps').value);
+				randomWalk.partsOfScreen = Number(document.getElementById('partOfScreen').value);
+				randomWalk.xCoordUpp = Number(document.getElementById('xCoordinate').value);
+				randomWalk.yCoordUpp = Number(document.getElementById('yCoordinate').value);
+				
+				offsetTime = 0;
+				randomWalk.removeChilds(walkerContainerNode);
+
+				randomWalk.createWalkers();
+
+				
+			}
+
+			/** 
+			 * Event handler that creates a walker, if the user clicks anywhere in the containerWalker
+			*/
+			walkerContainerNode.onclick = function(e){
+					randomWalk.createOneWalker(e);
+			}
+
+			/** 
+			 * Toggles the borders on/off. No border collisions if turned off.
+			*/
+			document.getElementById('toggleBoarders').onclick = function(){
+				if(toggleBoarders){
+					toggleBoarders = false;
+					randomWalk.setToggleBoarders(toggleBoarders);
+					walkerContainerNode.setAttribute('style', 'border: 0px');
+				} else {
+					toggleBoarders = true;
+					randomWalk.setToggleBoarders(toggleBoarders);
+					walkerContainerNode.setAttribute('style', 'border: 1px solid black');
+				}
+			}
+
+			/** 
+			 * Toggles the collisions on/off. Border collisions are still present, if not turned off separately.
+			*/
+			document.getElementById('toggleCollisions').onclick = function(){
+				if(toggleCollisions){
+					toggleCollisions = false;
+					randomWalk.setToggleCollisions(toggleCollisions);
+				} else {
+					toggleCollisions = true;
+					randomWalk.setToggleCollisions(toggleCollisions);
+				}
+			}
+			
+
+			/**
+			 * This part implements the graph below the random walk. The distance to zero of the walkers or at most the first ten walkers are shown, and the total distance of all walkers.
+			*/
+			
+			const svg = d3.select("#positionGraph");
+			svg.attr('width', window.innerWidth - 3*window.innerWidth/100);
+			svg.attr("height", window.innerHeight / 4);
+			const margin = {top: 10, right: 10, bottom: 10, left: 30};
+			const graphHeight = +svg.attr('height') - margin.top - margin.bottom;
+			const graphWidth = +svg.attr('width') - margin.left - margin.right;
+			
+			let g = svg.append("g")
+						 .attr('width', graphWidth + margin.left + margin.right)
+						 .attr('height', graphHeight + margin.top + margin.bottom)
+						 .attr("transform", 
+						       "translate(" + margin.left + "," + margin.top + ")");
+
+			let x = d3.scaleLinear()	
+						.range([0, graphWidth - graphWidth/45])
+						.domain([0, 10]);
+
+			let yDistance = d3.scaleLinear()
+						.range([graphHeight, 0])
+						.domain([-10, 10]);
+
+			let yMeanDistance = d3.scaleLinear()
+									.range([graphHeight / 5, 0])
+									.domain([-1, 1]);
+
+			let line = d3.line()
+						.x(function(d) { return x(d.date); })
+						.y(function(d) { return yDistance(d.distance); });
+			
+			let lineMean = d3.line()
+						.x(function(d){ return x(d.date);})
+						.y(function(d){ return yMeanDistance(d.expectedValue); });
+
+			let xAxis = g.append("g")
+							.attr("class", "x axis")
+							.attr('id', 'xAxis')
+							.attr("transform", "translate(0," + (graphHeight / 2) + ")")
+							.call(d3.axisBottom(x))
+						  .append('text')
+							.attr('y', graphHeight/5)
+							.attr('x', graphWidth/80)
+							.attr('font-size', '1.5em')
+							.attr('fill', 'black')
+							.text('Time');
+
+
+			g.append("g")
+				.attr("class", "y axis")
+				.attr('id', 'yAxis')
+				.attr('transform', 'translate(' + (-graphWidth/120) + ', 0)')
+				.call(d3.axisLeft(yDistance))
+			  .append("text")
+				.attr("x", graphWidth / 15)
+				.attr('y', graphHeight / 11)
+				.attr('font-size', '1.5em')
+				.attr('fill', 'steelblue')
+				.style("text-anchor", "end")
+				.text("Distance");
+			
+			g.append('g')
+			   .attr('class', 'y axis')
+			   .attr('id', 'yAxisMean')
+			   .attr('transform', 'translate(' + (graphWidth - graphWidth/75) + ',' + (graphHeight / 2 - graphHeight/10) + ')')
+			   .call(d3.axisRight(yMeanDistance).ticks(2))
+			  .append('text')
+				.attr('x', graphHeight / 10)
+				.attr('y', -graphHeight / 3.5)
+				.attr('font-size', '1.5em')
+				.attr('fill', 'red')
+				.style('text-anchor', 'end')
+				.text('Expected Value');
+			
+			/**
+			 * Graph is updated on each iteration.
+			 */
+			function updateGraph(){
+				g.selectAll("path").remove();
+				x.domain([0, graphData[graphData.length - 1].date]);
+
+				
+				yDistance.domain([- d3.max(graphData, function(d){return Math.abs(d.distance);}), d3.max(graphData, function(d){return Math.abs(d.distance);})]);
+
+				yMeanDistance.domain([- d3.max(graphData, function(d){return Math.abs(d.expectedValue);}), d3.max(graphData, function(d){return Math.abs(d.expectedValue);})]);
+				d3.select('#xAxis').call(d3.axisBottom(x));
+				d3.select('#yAxis').call(d3.axisLeft(yDistance));
+				d3.select('#yAxisMean').call(d3.axisRight(yMeanDistance).ticks(2));
+				
+				g.append("path")
+					.data([graphData])
+					.attr("class", "line")
+					.attr("d", line);
+
+				g.append("path")
+					.attr('id', 'yMeanDistance')
+					.attr('transform', 'translate(0 ,' + (graphHeight / 2 - graphHeight/10) + ')')
+					.data([graphData])
+					.attr("class", "line")
+					.attr("d", lineMean);
+			}
+
+
+		})();
+	
+	</script>
+
+
+</body>
+</html>
